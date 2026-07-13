@@ -49,25 +49,25 @@
 
 ### V2 并行/合并字段组
 
-**24. V2 parallel.execution_mode 是否有效**
-- **级别:** fail（parallel 已配置时）| pass（未配置 parallel 时）
-- **条件:** `parallel.execution_mode` 值必须为 `concurrent`、`sequential` 或 `adaptive` 之一。v1 契约无 parallel 配置时为 pass（v2 特性尚未启用）
-- **修复:** 改为 `concurrent`（最快）、`sequential`（顺序执行）或 `adaptive`（根据资源自动选择）
+**24. V2 execution.max_parallel 约束**
+- **级别:** warn（多任务时）| pass（单任务时）
+- **条件:** `execution.max_parallel` 须 ≥ 1。值为 0 时 warn；> tasks 数时 warn"无实际并发效果"。v1 契约无 execution 配置时为 pass
+- **修复:** 设为 `min(4, len(tasks))` 或保留默认值 4
 
-**25. V2 parallel.max_concurrency 约束**
-- **级别:** warn（parallel 已配置时）| pass（未配置时）
-- **条件:** `parallel.max_concurrency` 若设置，须 ≥ 1 且 ≤ 任务数。值为 0 或超过任务数时 warn"无实际并发效果"；未设置时采用默认值 1（即顺序执行，等同于 sequential 模式）
-- **修复:** 设为 `min(4, len(tasks))` 或保留默认值
+**25. V2 execution.retry_strategy 是否有效**
+- **级别:** fail（execution 已配置时）| pass（未配置时）
+- **条件:** `execution.retry_strategy` 值必须为 `"fresh"` 或 `"cumulative"` 之一
+- **修复:** 改为 `"fresh"`（V1兼容）或 `"cumulative"`（下轮预apply上轮patch）
 
-**26. V2 merge.strategy 是否有效**
-- **级别:** fail（merge 已配置时）| pass（未配置 merge 时）
-- **条件:** `merge.strategy` 值必须为 `auto`、`manual` 或 `per_file` 之一。v1 契约无 merge 配置时为 pass
-- **修复:** 改为 `auto`（自动合并）、`manual`（人工确认）或 `per_file`（逐文件合并）
+**26. V2 verification.merge_strategy 是否有效**
+- **级别:** fail（verification 已配置 merge_strategy 时）| pass（未配置时）
+- **条件:** `verification.merge_strategy` 值必须为 `"auto"` 或 `"strict"` 之一
+- **修复:** 改为 `"auto"`（git merge-file 三路合并）或 `"strict"`（有冲突直接 escalation）
 
 **27. V2 并行任务验证命令独立性**
-- **级别:** fail（parallel 已启用 + 多任务 + 单条 verification.command 且无 task-scope 参数时）
-- **条件:** v2 并行模式下每个 task 的 verification 必须可独立执行。若 `parallel` 已配置、任务数 > 1、且 `verification.command` 为单一整套命令而无 per-task scope 参数，则各 task 无法独立验证——并行优势丧失且可能死锁
-- **修复:** 为每个 task 添加独立验证命令（v2 支持 per-task `verification.command`），或合并为单任务
+- **级别:** warn（max_parallel > 1 + 多任务 + 单条 verification.command 时）
+- **条件:** V2 并行模式下每个 task 的 verification 必须可独立执行。若 max_parallel > 1、任务数 ≥ 2、且 verification.command 为单一整套命令，则并行优势丧失且可能死锁
+- **修复:** 合并为单任务，或确保各 task 修改互不重叠的文件
 
 ### exit 字段组
 
