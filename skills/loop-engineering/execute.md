@@ -347,25 +347,45 @@ while true:
   completed_before_round = count(tasks where status == "completed")
   持久化到 state.pending_tasks_snapshot 和 state.completed_before_round
 
-  // ===== Per-Task 执行（顺序处理） =====
-  for each task where task.status in ["pending", "in_progress"]:
+  // ===== Per-Task 执行（V2 并行引擎） =====
+  pending_tasks = tasks where status in ["pending", "in_progress"]
+  parallel_count = min(len(pending_tasks), execution.max_parallel)
+
+  // 1. Spawn N makers concurrently — 批量创建 worktree + 启动子代理
+  makers = []
+  for i in range(parallel_count):
+    task = pending_tasks[i]
     if task.retry_count >= budget.max_retries:
       task.status = "failed"
-      continue  ← 跳过此任务
+      continue
 
-    // 1. 标记 in_progress
     task.status = "in_progress"
     写入 state 文件（同时刷新 heartbeat_epoch）
 
-    // 2. 创建 worktree
-    从 workspace.base_ref 全新检出
-    命名: .claude/worktrees/loop-<loop-name>-r<round>-<task-id>
+    // 2. 创建 worktree（V2 cumulative 模式：预 apply 上一轮 patch，失败退化为 fresh）
+    if retry_strategy == "cumulative" and task 有上一轮的 .patch 文件:
+      worktree = git worktree add .claude/worktrees/loop-<loop-name>-r<round>-<task-id> <base_ref>
+      result = git -C <worktree> apply <previous .patch>
+      if result != 0:
+        warn "cumulative patch apply 失败，退化为 fresh 模式"
+        task.prev_patch_applied = false
+        // worktree 保持干净，maker 从 base_ref 零开始
+      else:
+        task.prev_patch_applied = true
+        log "cumulative 模式：已 apply 上一轮 patch 到 worktree"
+    else:
+      // fresh 模式：全新检出
+      worktree = git worktree add .claude/worktrees/loop-<loop-name>-r<round>-<task-id> <base_ref>
+      task.prev_patch_applied = false
+
+    // node_modules 复用（若项目根存在）
     若项目根存在 node_modules → cp -r 到 worktree
       - cp 失败 → 等待 2s → 重试
       - 仍失败 → 降级：rm -rf worktree/node_modules + warn 日志
     若主项目无 node_modules → 提示 maker 需自行 npm install
 
-    // 刷新心跳（cp node_modules 可能很慢）
+    写入 state（prev_patch_applied 已记录）
+    刷新心跳（cp node_modules 可能很慢）
 
     // 3. Spawn maker 子代理（全新会话）
     工作目录：worktree 绝对路径
@@ -382,6 +402,21 @@ while true:
     - "context 以此处注入的内容为准，勿读取 worktree 内的同名文件"
     - "不要执行 git 命令——所有文件操作由父会话统一管理"
 
+    makers.append(spawn maker 子代理(worktree, task))
+
+  // 4. 并发等待全部 maker 返回 + 每 300s 刷新租约心跳
+  //    V2 并行模式下父会话在等待 Promise.all 期间主动刷新心跳
+  wait_start = epoch_seconds()
+  并发等待全部 makers 返回，期间：
+    while makers 未全部返回:
+      sleep 300s
+      刷新 heartbeat_epoch（touch meta.json 中的 heartbeat_epoch 字段）
+      if (epoch_seconds() - wait_start) > lease_seconds:
+        warn "maker 执行时间超过租约窗口，心跳已持续刷新，lease 仅作安全网"
+      // 若 execution.estimated_maker_runtime 超时 → kill 超时 maker → task 视为失败
+
+  // 5. 顺序处理每个 maker 的结果（state 写入需串行，按 task-id 升序）
+  for each 完成的 maker（按 task-id 数值升序）:
     // 4. 内置检查 + 抓取 patch（verification 之前——防测试产物污染）
     (a) 测试删除检查：
         扫描 *.test.* 和 *.spec.* 文件的 deletions vs additions
@@ -401,9 +436,9 @@ while true:
         • 测试删除检查（已在上方 (a) 覆盖）
     (f) 审查结果：
         • 全部通过或仅 WARN → 继续 verification
-        • 任一 FAIL → 跳过 verification，task.maker_result.verdict = \"code_review_failed\"
+        • 任一 FAIL → 跳过 verification，task.maker_result.verdict = "code_review_failed"
           task.maker_result.feedback = 具体违规项列表
-          task.retry_count++ ; task.status = \"pending\"
+          task.retry_count++ ; task.status = "pending"
           → 下一轮 maker 将在 prompt 中收到此 feedback
     若契约未配置 code_review（disabled 或省略）：
     (g) 跳过此步，直接进入 verification
@@ -424,6 +459,93 @@ while true:
     是 → 跳出 per-task 循环，进入下方"一轮结束，统一判定"
 
     // 9. 删除 worktree（无论通过与否）。失败则记日志不阻塞
+
+  // ===== 冲突预检（V2 新增）=====
+  // 收集本轮所有 maker 的有效 patch（排除 code_review_failed 和 verification-failed 的 task）
+  valid_tasks = [t for t in makers where t.verdict not in ("code_review_failed")]
+  all_patches = [t.patch for t in valid_tasks]
+  conflicts = check_file_intersection(all_patches)
+  // check_file_intersection：提取各 patch 的 files_changed，检测文件级交集
+
+  if conflicts and merge_strategy == "strict":
+    // 严格模式：任何文件冲突直接 escalation
+    triggered += "merge_conflict"
+    state.escalation_reason = "merge_conflict"
+    写入 state 文件
+    → escalation（报告冲突文件交集 + 建议合并任务或拆分 loop）
+
+  if conflicts and merge_strategy == "auto":
+    // 自动合并模式：尝试 git merge-file 三路合并
+    for each conflict_pair (task_i, task_j 修改同一文件 f):
+      base = git show <base_ref>:<f>
+      current = task_i worktree 中的文件 <f>
+      other = task_j worktree 中的文件 <f>
+      result = git merge-file <current> <base> <other>
+      if result != 0 (冲突标记未自动解决):
+        triggered += "merge_conflict"
+        state.escalation_reason = "merge_conflict"
+        写入 state 文件
+        → escalation（报告 merge-file 冲突详情 + 建议手动解决或拆分）
+      else:
+        log "三路合并成功：<f>（task-<i> ∪ task-<j>）"
+        // 更新对应的 .patch 以反映合并结果
+        git -C <worktree_i> diff --cached --binary > .loop/diffs/<loop-name>/<task-i>.patch
+
+  // ===== 合并验证轮（V2 增强）=====
+  non_empty_patches = 非空 .patch 文件数量
+  if non_empty_patches == 0:
+    → loop status = "completed"，直接退出（无改动即通过）
+    → git commit feat（自动提交收敛结果）
+  elif non_empty_patches == 1:
+    → loop status = "completed"，直接退出（唯一 patch 已在自身 worktree 验证通过）
+    → git commit feat（自动提交收敛结果）
+  else:  // ≥2 非空 patch
+    // 创建合并 worktree
+    mergetree = .claude/worktrees/loop-<loop-name>-merge
+    git worktree add "$mergetree" <base_ref>
+
+    // apply 全部有效 patch（排除 code_review_failed 和 verification-failed 的 task）
+    applied_patches = []
+    for each task in valid_tasks（按 task-id 数值升序）:
+      if .patch 为空: skip
+      git -C "$mergetree" apply <patch-path>
+      if apply 成功:
+        applied_patches.append(task)
+      else:
+        stderr = git apply --check 的输出
+        if stderr 含系统级错误:
+          state.status = "crashed"
+          → escalation（不可恢复的系统错误）
+        else:
+          warn "patch task-<id> apply 冲突: <stderr>"
+          // 继续尝试剩余 patch
+
+    // 运行合并 verification
+    运行 verification.command
+    通过:
+      → loop status = "completed"，退出
+      → git commit feat（V2 新增：自动提交合并验证通过的结果）
+    不通过:
+      // 二分回退策略（V2 新增）：定位导致失败的冲突 patch
+      if len(applied_patches) >= 2:
+        git worktree remove --force "$mergetree"
+        // 逐 patch apply + verify，定位第一个导致 verification 失败的 patch
+        mergetree = git worktree add "$mergetree" <base_ref>
+        for each patch in applied_patches:
+          git -C "$mergetree" apply <patch>
+          运行 verification.command
+          if 不通过:
+            记录 culprit = task-<id>
+            break
+        triggered += "merge_verification_failed"
+        state.escalation_reason = "merge_verification_failed"
+        写入 state 文件
+        → escalation（报告：culprit patch = task-<id>，建议拆分或合并相关任务）
+      else:
+        triggered += "merge_verification_failed"
+        state.escalation_reason = "merge_verification_failed"
+        写入 state 文件
+        → escalation（合并验证失败，单 patch 无法二分，建议检查 verification 逻辑）
 
   // ===== 一轮结束，统一判定 =====
   open_tasks = count(tasks where status != "completed" AND status != "failed")
@@ -452,25 +574,16 @@ while true:
 
   // 判定退出条件
   if 所有 task status == "completed":
-    // 合并验证轮
-    non_empty_patches = 非空 .patch 文件数量
-    if non_empty_patches == 0:
-      → loop status = "completed"，直接退出（无改动即通过）
-    elif non_empty_patches == 1:
-      → loop status = "completed"，直接退出（唯一 patch 已在自身 worktree 验证通过）
-    else:  // ≥2 非空 patch
-      → 创建合并 worktree（.claude/worktrees/loop-<loop-name>-merge）
-      → 按 task-id 数值升序 apply 各 patch
-      → 运行 verification.command
-      → 通过 → loop status = "completed"，退出
-      → 不通过 → triggered += "merge_verification_failed"
-        → escalation（合并验证失败）
-        → 报告中列出各 patch 的 files_changed 交集分析
+    // 合并验证轮已在上面执行，此处处理已完成路径
+    if non_empty_patches <= 1:
+      → loop status = "completed"，直接退出
+      → git commit feat（V2 新增：单/零 patch 时自动提交收敛结果）
+    // 多 patch 合并验证已在上方合并验证轮中处理（git commit feat 在验证通过时触发）
 
   elif triggered 非空:
     state.status = "escalated"
     state.escalation_reason = 按优先级取最高者：
-      merge_verification_failed > timeout > budget_exhausted > no_progress
+      merge_verification_failed > merge_conflict > timeout > budget_exhausted > no_progress
     写入 state 文件
     → escalation
   else:
