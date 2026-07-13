@@ -42,6 +42,9 @@ loop:
     maker:
       agent_type: "general-purpose"
       model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "fresh"
   verification:
     command: "npm test"
     timeout: 300
@@ -51,11 +54,13 @@ loop:
         match_mode: word
         patterns:
           - "passed"
+    merge_strategy: "auto"
   state:
     path: ".loop/state/ci-sweeper.json"
   budget:
     max_retries: 3
     max_wall_time: 1800
+    estimated_maker_runtime: 300
   escalation:
     on:
       - timeout
@@ -94,16 +99,21 @@ loop:
     maker:
       agent_type: "general-purpose"
       model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "fresh"
   verification:
     command: "npm test"
     timeout: 300
     expect:
       exit_code: [0]
+    merge_strategy: "auto"
   state:
     path: ".loop/state/bug-fix.json"
   budget:
     max_retries: 3
     max_wall_time: 1800
+    estimated_maker_runtime: 300
   escalation:
     on:
       - timeout
@@ -135,16 +145,21 @@ loop:
     maker:
       agent_type: "general-purpose"
       model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "fresh"
   verification:
     command: "npm run lint && npx tsc --noEmit"
     timeout: 300
     expect:
       exit_code: [0]
+    merge_strategy: "auto"
   state:
     path: ".loop/state/code-quality.json"
   budget:
     max_retries: 3
     max_wall_time: 1800
+    estimated_maker_runtime: 300
   escalation:
     on:
       - timeout
@@ -174,6 +189,9 @@ loop:
     maker:
       agent_type: "general-purpose"
       model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "fresh"
   verification:
     command: "npm test"
     timeout: 600
@@ -183,11 +201,13 @@ loop:
         match_mode: word
         patterns:
           - "passed"
+    merge_strategy: "auto"
   state:
     path: ".loop/state/refactor.json"
   budget:
     max_retries: 2
     max_wall_time: 3600
+    estimated_maker_runtime: 300
   escalation:
     on:
       - timeout
@@ -221,6 +241,9 @@ loop:
     maker:
       agent_type: "general-purpose"
       model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "fresh"
   verification:
     command: "test -f .loop/reports/daily-triage-*.md && echo 'report generated'"
     timeout: 120
@@ -230,11 +253,13 @@ loop:
         match_mode: substring
         patterns:
           - "report generated"
+    merge_strategy: "auto"
   state:
     path: ".loop/state/daily-triage.json"
   budget:
     max_retries: 1
     max_wall_time: 600
+    estimated_maker_runtime: 300
   escalation:
     on: []
     method: notify
@@ -267,16 +292,21 @@ loop:
     maker:
       agent_type: "general-purpose"
       model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "fresh"
   verification:
     command: "test -f .loop/reports/pr-babysitter-*.md && echo 'ok'"
     timeout: 120
     expect:
       exit_code: [0]
+    merge_strategy: "auto"
   state:
     path: ".loop/state/pr-babysitter.json"
   budget:
     max_retries: 1
     max_wall_time: 600
+    estimated_maker_runtime: 300
   escalation:
     on: []
     method: notify
@@ -307,16 +337,21 @@ loop:
     maker:
       agent_type: "general-purpose"
       model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "fresh"
   verification:
     command: "test -f .loop/reports/dep-sweeper-*.md && echo 'ok'"
     timeout: 120
     expect:
       exit_code: [0]
+    merge_strategy: "auto"
   state:
     path: ".loop/state/dep-sweeper.json"
   budget:
     max_retries: 1
     max_wall_time: 600
+    estimated_maker_runtime: 300
   escalation:
     on: []
     method: notify
@@ -347,16 +382,21 @@ loop:
     maker:
       agent_type: "general-purpose"
       model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "fresh"
   verification:
     command: "test -f CHANGELOG.md && grep -q '## ' CHANGELOG.md && echo 'ok'"
     timeout: 120
     expect:
       exit_code: [0]
+    merge_strategy: "auto"
   state:
     path: ".loop/state/changelog.json"
   budget:
     max_retries: 1
     max_wall_time: 600
+    estimated_maker_runtime: 300
   escalation:
     on: []
     method: notify
