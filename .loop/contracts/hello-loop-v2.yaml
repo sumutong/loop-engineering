@@ -1,0 +1,45 @@
+loop:
+  name: "hello-loop-v2"
+  objective: "验证 V2 并行执行 + 累积重试 + 自动合并能力，确保 npm test 全部通过"
+  trigger:
+    type: manual
+  discover:
+    type: manual_list
+    tasks:
+      - "修复所有测试失败，使 npm test 全部通过"
+  workspace:
+    type: worktree
+    base_ref: "HEAD"
+  context:
+    - "CLAUDE.md"
+  delegation:
+    maker:
+      agent_type: "general-purpose"
+      model: "sonnet"
+  execution:
+    max_parallel: 4
+    retry_strategy: "cumulative"
+  verification:
+    command: "npm test"
+    timeout: 300
+    expect:
+      exit_code: [0]
+      stdout_contains:
+        match_mode: word
+        patterns:
+          - "passed"
+    code_review:
+      enabled: true
+    merge_strategy: "auto"
+  state:
+    path: ".loop/state/hello-loop-v2.json"
+  budget:
+    max_retries: 3
+    max_wall_time: 1800
+    estimated_maker_runtime: 300
+  escalation:
+    on:
+      - timeout
+    method: notify
+  exit:
+    condition: all_tasks_completed
