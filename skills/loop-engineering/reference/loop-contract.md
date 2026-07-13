@@ -1,6 +1,6 @@
 # Loop 契约格式规范
 
-本文件定义 loop-engineering skill 的标准契约格式，供其他 skill（如 executing-plans）程序化引用。包含 13 个字段的完整 schema、验证规则和测试用例。
+本文件定义 loop-engineering skill 的标准契约格式，供其他 skill（如 executing-plans）程序化引用。包含 14 个顶层字段（含子字段共 17 个可配置项）的完整 schema、验证规则和测试用例。
 
 ## 字段定义
 
@@ -62,7 +62,14 @@
     - `model`: string，执行模型。v1 支持 `"sonnet"` 或 `"opus"`
   - `checker`: object，可选。v2 预留——v1 验证由父会话直接执行，不使用此字段。若显式设置，audit 会 warn 提示"v1 不使用此配置"
 
-### 8. verification
+### 8. execution
+- **类型:** object
+- **必填:** 否（V2 新增，默认兼容 V1 顺序模式）
+- **字段:**
+  - `max_parallel`: number，默认 `4`。并行 maker 数上限。`≤1` 时退化为 V1 顺序模式
+  - `retry_strategy`: string，默认 `"fresh"`。`"fresh"`（V1兼容）或 `"cumulative"`（下轮预apply上轮patch）
+
+### 9. verification
 - **类型:** object
 - **必填:** 是
 - **字段:**
@@ -82,24 +89,26 @@
     - 规则集（不可单独关闭）：bare except / 空 catch（FAIL）、魔法数字（FAIL）、死代码/未使用导入（WARN）、eval/exec/os.system（FAIL）、测试删除（FAIL，硬编码不可关闭）
     - 全部通过或仅 WARN → 继续 verification；任一 FAIL → 跳过 verification，打回 maker 下一轮重做
     - 若省略或 `enabled: false`，仅保留测试删除检测（硬编码）
+  - `merge_strategy`: string，默认 `"auto"`。`"strict"`（有冲突就 escalation）或 `"auto"`（git merge-file 三路合并）
 
-### 9. state
+### 10. state
 - **类型:** object
 - **必填:** 是
 - **字段:**
   - `path`: string，必填。state 文件的相对路径（相对于项目根目录）。父目录必须为 `.loop/state/`，不得含 `..` 穿越
 - **默认值:** `.loop/state/<name>.json`
 
-### 10. budget
+### 11. budget
 - **类型:** object
 - **必填:** 是
 - **字段:**
   - `max_retries`: number，必填。单个任务最大总尝试次数（含首次）。必须 > 0。`max_retries=3` 表示最多 3 次尝试（retry_count: 0, 1, 2）
   - `max_wall_time`: number，可选。整体 loop 最长运行秒数。非硬墙钟——仅在每轮结束时评估，无法中断挂死的 maker。v1 最佳实践，非强制
+  - `estimated_maker_runtime`: number，可选，默认 `300`。预估单 maker 运行秒数。用于租约公式和心跳间隔计算
 
 > **⚠️ `max_retries` 命名说明：** 字段名"retries"暗示"重试次数"，但 v1 语义为**最大总尝试次数**（含首次 run + (max_retries - 1) 次 retry）。`max_retries=1` 时 retry_count 永远到不了 1（首次失败后 retry_count=1 ≥ 1 → 标 failed），即"只试一次、不重试"。如果后续版本引入真正的"重试次数上限"字段，建议新增 `max_attempts` 并废弃此字段。
 
-### 11. escalation
+### 12. escalation
 - **类型:** object
 - **必填:** 是
 - **字段:**
@@ -113,14 +122,14 @@
 - **escalation 优先级（决定 `state.escalation_reason` 取值 + 报告标题；v1 所有条件使用同一 method）：**
   `merge_verification_failed` > `timeout` > `budget_exhausted` > `no_progress`
 
-### 12. exit
+### 13. exit
 - **类型:** object
 - **必填:** 是
 - **字段:**
   - `condition`: string，必填。v1 仅支持 `"all_tasks_completed"`（值必须严格等于此字符串，大小写敏感）
 - **说明:** `all_tasks_completed` 要求 state 中所有 task status 均为 `completed`（严格全部通过）。有 failed 任务时不会满足此条件——会先被 `budget_exhausted` escalation 拦截
 
-### 13. no_progress_limit
+### 14. no_progress_limit
 - **类型:** number
 - **必填:** 否
 - **默认值:** `max(1, min(2, max_retries - 1))`
@@ -146,6 +155,9 @@
 | 11 | name 长度 ≤ 20 字符 | name |
 | 12 | on 非空时必须包含至少一个有效值 | escalation |
 | 13 | name 不能以 `-` 结尾 | name |
+| 14 | max_parallel 必须 ≥ 1，retry_strategy 必须为 `"fresh"` 或 `"cumulative"` | execution |
+| 15 | estimated_maker_runtime 必须 > 0 | budget.estimated_maker_runtime |
+| 16 | merge_strategy 必须为 `"auto"` 或 `"strict"` | verification.merge_strategy |
 
 ## 完整示例
 
