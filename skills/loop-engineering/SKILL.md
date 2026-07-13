@@ -5,7 +5,7 @@ description: >
   fourth paradigm of AI programming after Prompt, Context, and Harness Engineering.
   Use this skill when the user wants to create automated iteration cycles where AI
   makes changes, verifies them, and converges — tasks are defined by humans,
-  execution is driven by the system.
+  execution is driven by the system. (V2: 并行执行 + 累积重试 + 自动合并)
 ---
 
 # Loop Engineering
@@ -13,6 +13,16 @@ description: >
 Loop Engineering（循环工程）是 AI 编程领域继 Prompt Engineering、Context Engineering、Harness Engineering 之后的第四层范式。核心理念：**不再手动一句句提示 AI，而是设计循环系统让 AI 按轮次执行、验证、持久化状态、自收敛——任务由人定义，执行由系统驱动。**
 
 本 skill 不修改 superpowers 核心框架的任何现有文件。它是一个独立可分享的 skill，同时通过 `reference/loop-contract.md` 契约格式向其他 skill（特别是 executing-plans）暴露公开接口，使 plan 中的 loop 型任务可以被识别和接管。
+
+## V2 新增能力
+
+| 能力 | 默认值 | 说明 |
+|------|--------|------|
+| 并行执行 | `execution.max_parallel: 4` | 多个 task 的 maker 同时运行 |
+| 累积重试 | `execution.retry_strategy: "fresh"` | `"cumulative"` 模式下轮预 apply 上轮 patch |
+| 自动合并 | `verification.merge_strategy: "auto"` | 同文件冲突时 git merge-file 三路合并 |
+
+所有新字段均有默认值——V1 契约在 V2 引擎上可直接运行。
 
 ## 意图识别
 
