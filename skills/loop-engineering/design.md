@@ -28,16 +28,20 @@
 5. **工作区（workspace）：** "maker 将从哪个 git 分支/commit 检出工作区？默认 `origin/main`，若不存在则试 `origin/master`，最后回退到 `HEAD`。你也可以指定具体的 commit SHA。"
 6. **额外上下文（context）：** "除了自动注入的 loop-contract.md 外，还需要注入哪些知识文件？如 CLAUDE.md、编码规范等。直接回车跳过。"
 7. **maker 模型（delegation.maker.model）：** "maker 使用什么模型？默认 `sonnet`。复杂任务可选 `opus`。"
-8. **验证命令（verification.command）：** "用什么 Shell 命令来验证任务是否完成？必须是机器可执行的命令（如 `npm test`）。**不要手写 `timeout` 前缀——系统会自动包装。**"
-9. **验证超时（verification.timeout）：** "验证命令超时多少秒？默认 300。"
-10. **通过标准（verification.expect）：** "如何判断验证通过？默认检查退出码为 0。你还可以添加：正向断言（输出中必须包含的词，如 'passed'）、负向断言（输出中不得包含的词，如 'fail'）。"
-11. **State 路径（state.path）：** "状态文件保存到哪里？默认 `.loop/state/<name>.json`。直接回车使用默认值。"
-12. **重试上限（budget.max_retries）：** "每个任务最多重试几次？默认 3。含首次尝试，即 max_retries=3 表示最多 3 次机会。"
-13. **整体超时（budget.max_wall_time）：** "整个 loop 最长运行多少秒？默认 1800（30 分钟）。注意：此超时仅在每轮结束时检查，无法中断挂死的 maker。"
-14. **升级条件（escalation.on）：** "触发哪些条件时需要升级（通知你并退出 loop）？可选：`no_progress`（连续 N 轮无进展）、`timeout`（整体超时）。`budget_exhausted`（重试耗尽）始终强制生效。单任务建议只选 `timeout`——`no_progress` 在单任务中会提前终止。"
-15. **no_progress_limit（仅当选了 no_progress 时）：** "连续几轮无进展触发升级？默认 `max(1, min(2, max_retries - 1))`。举例：若 max_retries=3 则默认值=2（连续 2 轮无进展触发，给 1 轮容错空间）；若 max_retries=2 则默认值=1（第 1 轮失败即触发）。必须小于 max_retries。"
-16. **通知方式（escalation.method）：** "升级时如何通知你？`notify`（桌面通知，需 MCP 支持，不可用时自动降级为终端打印+退出）或 `manual`（终端打印+等待你确认）。默认 `notify`。"
-16b. （仅当选了 `manual` 时追问）**等待超时（escalation.manual_timeout）：** "升级后等待你确认的最长秒数？超时后自动退出。默认 120 秒。直接回车使用默认值。"
+8. **并行数（execution.max_parallel）：** "maker 最多并行运行几个？默认 4。设为 1 则退化为 V1 顺序模式。并行 maker 各自独立修改不重叠的文件——请确保 discover.tasks 中的任务满足此约束。"
+9. **重试策略（execution.retry_strategy）：** "失败重试时如何恢复现场？`fresh`（每轮全新开始，不携带上轮上下文，V1 兼容）或 `cumulative`（下轮预 apply 上轮 patch，适合迭代修复）。默认 `fresh`。"
+10. **预估运行时间（budget.estimated_maker_runtime）：** "预估单个 maker 运行多少秒？默认 300。用于计算心跳间隔和租约超时——设置过大会导致挂死检测迟钝，过小则正常任务可能被误杀。"
+11. **验证命令（verification.command）：** "用什么 Shell 命令来验证任务是否完成？必须是机器可执行的命令（如 `npm test`）。**不要手写 `timeout` 前缀——系统会自动包装。**"
+12. **验证超时（verification.timeout）：** "验证命令超时多少秒？默认 300。"
+13. **通过标准（verification.expect）：** "如何判断验证通过？默认检查退出码为 0。你还可以添加：正向断言（输出中必须包含的词，如 'passed'）、负向断言（输出中不得包含的词，如 'fail'）。"
+14. **合并策略（verification.merge_strategy）：** "多任务 patch 如何合并？`auto`（git merge-file 三路合并，自动解决无冲突部分）或 `strict`（任一冲突即升级）。默认 `auto`。单任务 loop 中此字段无实际效果——合并仅在多任务时触发。"
+15. **State 路径（state.path）：** "状态文件保存到哪里？默认 `.loop/state/<name>.json`。直接回车使用默认值。"
+16. **重试上限（budget.max_retries）：** "每个任务最多重试几次？默认 3。含首次尝试，即 max_retries=3 表示最多 3 次机会。"
+17. **整体超时（budget.max_wall_time）：** "整个 loop 最长运行多少秒？默认 1800（30 分钟）。注意：此超时仅在每轮结束时检查，无法中断挂死的 maker。"
+18. **升级条件（escalation.on）：** "触发哪些条件时需要升级（通知你并退出 loop）？可选：`no_progress`（连续 N 轮无进展）、`timeout`（整体超时）。`budget_exhausted`（重试耗尽）始终强制生效。单任务建议只选 `timeout`——`no_progress` 在单任务中会提前终止。"
+19. **no_progress_limit（仅当选了 no_progress 时）：** "连续几轮无进展触发升级？默认 `max(1, min(2, max_retries - 1))`。举例：若 max_retries=3 则默认值=2（连续 2 轮无进展触发，给 1 轮容错空间）；若 max_retries=2 则默认值=1（第 1 轮失败即触发）。必须小于 max_retries。"
+20. **通知方式（escalation.method）：** "升级时如何通知你？`notify`（桌面通知，需 MCP 支持，不可用时自动降级为终端打印+退出）或 `manual`（终端打印+等待你确认）。默认 `notify`。"
+20b. （仅当选了 `manual` 时追问）**等待超时（escalation.manual_timeout）：** "升级后等待你确认的最长秒数？超时后自动退出。默认 120 秒。直接回车使用默认值。"
 
 **智能默认值（非必填字段自动填充）：**
 - `context` 默认 `[]`
@@ -45,14 +49,18 @@
 - `no_progress_limit` 默认 `max(1, min(2, max_retries - 1))`（省略时按默认值，单任务契约建议省略）
 - `delegation.maker.agent_type` 默认 `"general-purpose"`
 - `delegation.maker.model` 默认 `"sonnet"`
+- `execution.max_parallel` 默认 `4`
+- `execution.retry_strategy` 默认 `"fresh"`
+- `budget.estimated_maker_runtime` 默认 `300`
 - `verification.timeout` 默认 `300`
+- `verification.merge_strategy` 默认 `"auto"`
 - `escalation.method` 默认 `"notify"`
 - `escalation.manual_timeout` 默认 `120`
 
 ### 快速模式流程
 
 1. 让用户一次性描述所有需求（目标、任务、验证方式等）
-2. AI 根据描述填充全部 13 字段
+2. AI 根据描述填充全部 14 个顶层字段（含子字段共 17 个可配置项）
 3. 从 `reference/loop-patterns.md` 模式库中推荐最接近的模板作为起点
 4. **逐段确认**（分 3 段：基本设置 / 验证与预算 / 升级与退出），每段展示当前填充值并允许用户修改
 5. 确认无误后输出 YAML
