@@ -493,6 +493,17 @@ while true:
         // 更新对应的 .patch 以反映合并结果
         git -C <worktree_i> diff --cached --binary > .loop/diffs/<loop-name>/<task-i>.patch
 
+  // 合并验证通过后 — 若不存在文件级交集但多 task 无交集且有非空 patch
+  // → 语义冲突检测（V2 新增）：
+  // 对无文件交集的 completed task 按二分法验证：
+  //   group_a = 前半 completed task 的 patch，group_b = 后半
+  //   分别 apply + verify
+  //      group_a 不通过 & group_b 通过 → culprit 在 group_a 中，递归二分
+  //      group_b 不通过 & group_a 通过 → culprit 在 group_b 中，递归二分
+  //      两者都不通过 → 无法隔离 → 全部回退
+  //      两者都通过 → 确认语义兼容，无冲突
+  // 定位到最小冲突对后：仅回退该对对应的 task，其余保留 completed
+
   // ===== 合并验证轮（V2 增强）=====
   non_empty_patches = 非空 .patch 文件数量
   if non_empty_patches == 0:
