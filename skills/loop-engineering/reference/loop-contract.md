@@ -77,6 +77,11 @@
       - `match_mode`: string，`"word"`（默认）| `"substring"` | `"regex"`
       - `patterns`: string[]
 - **约束:** `exit_code`、`stdout_contains`（非空 patterns）、`stdout_not_contains`（非空 patterns）三者不能同时为空/未指定。若全部省略，任何命令都会 trivially pass——违背"verification 强制机器可验证"的核心设计决策
+  - `code_review`: object，可选。maker patch 代码审查闸门
+    - `enabled`: boolean，默认 `false`。`true` 时在 verification 命令之前运行代码审查
+    - 规则集（不可单独关闭）：bare except / 空 catch（FAIL）、魔法数字（FAIL）、死代码/未使用导入（WARN）、eval/exec/os.system（FAIL）、测试删除（FAIL，硬编码不可关闭）
+    - 全部通过或仅 WARN → 继续 verification；任一 FAIL → 跳过 verification，打回 maker 下一轮重做
+    - 若省略或 `enabled: false`，仅保留测试删除检测（硬编码）
 
 ### 9. state
 - **类型:** object

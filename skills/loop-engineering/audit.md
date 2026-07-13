@@ -4,7 +4,7 @@
 
 ## 审查清单
 
-以下 22 个检查项按字段分组。每项标注判定级别、精确的判定条件和修复建议。
+以下 23 个检查项按字段分组。每项标注判定级别、精确的判定条件和修复建议。
 
 ### verification 字段组
 
@@ -22,6 +22,12 @@
 - **级别:** fail
 - **条件:** `exit_code`、`stdout_contains`（非空 patterns）、`stdout_not_contains`（非空 patterns）三者不能同时为空/未指定。若全部省略，任何命令都会 trivially pass——违背"verification 强制机器可验证"的核心设计决策
 - **修复:** 至少设置 `exit_code: [0]` 作为最基本的通过闸门
+
+**3.5. verification.code_review 配置检查**
+- **级别:** warn
+- **条件:** `verification.code_review.enabled` 未配置或为 `false`
+- **说明:** 未启用代码审查意味着 maker 的代码质量不受控——bare except、魔法数字等不会被拦截。强烈建议生产 loop 启用
+- **修复:** 添加 `verification.code_review.enabled: true`
 
 ### escalation 字段组
 
