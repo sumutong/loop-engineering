@@ -1,11 +1,34 @@
 #!/usr/bin/env bash
 # acquire-lock.sh — 租约锁抢锁实现
-# Usage: acquire-lock.sh <loop-name>
+# Usage: acquire-lock.sh [--lease-seconds N] <loop-name>
 # Exit codes: 0=抢到锁, 1=有实例运行/竞争失败, 2=STALE_FOREIGN(过期锁来自其他机器)
 
 set -euo pipefail
 
-LOOP_NAME="${1:?Usage: acquire-lock.sh <loop-name>}"
+LEASE_SECONDS=1800
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --lease-seconds)
+      LEASE_SECONDS="${2:?Error: --lease-seconds requires a value}"
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      echo "Usage: acquire-lock.sh [--lease-seconds N] <loop-name>" >&2
+      exit 1
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+LOOP_NAME="${1:?Usage: acquire-lock.sh [--lease-seconds N] <loop-name>}"
 LOCK_DIR=".loop/state/${LOOP_NAME}.lock"
 
 _parse_json() {
@@ -43,7 +66,7 @@ write_meta() {
   },
   "acquired_at": "${now_iso}",
   "heartbeat_epoch": ${now_epoch},
-  "lease_seconds": 1800
+  "lease_seconds": ${LEASE_SECONDS}
 }
 METAEOF
 }
