@@ -85,6 +85,11 @@
 
 ### budget 字段组
 
+**9.5. budget.estimated_maker_runtime 有效性**
+- **级别:** fail
+- **条件:** `budget.estimated_maker_runtime` 存在且 ≤ 0。该字段用于租约公式和心跳间隔计算，值为 0 或负数会导致心跳逻辑异常
+- **修复:** 设为 > 0（建议 300）
+
 **9. budget.max_retries 是否设置**
 - **级别:** fail
 - **条件:** 必须存在且 > 0
