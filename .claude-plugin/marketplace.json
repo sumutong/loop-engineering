@@ -1,0 +1,19 @@
+{
+  "name": "loop-engineering",
+  "description": "Loop Engineering — AI 编程第四层范式。设计、执行、审计自收敛 AI 循环。",
+  "owner": {
+    "name": "",
+    "url": "https://github.com/jnMetaCode/loop-engineering"
+  },
+  "plugins": [
+    {
+      "name": "loop-engineering",
+      "description": "Loop Engineering — 设计、执行、审计自收敛 AI 循环。含契约格式规范、8 个预置模式（CI Sweeper/Bug Fix/Refactor 等）、22 项审计清单。",
+      "version": "1.0.0",
+      "source": "npm:loop-engineering",
+      "homepage": "https://github.com/jnMetaCode/loop-engineering",
+      "license": "MIT",
+      "keywords": ["loop-engineering", "ai-loop", "self-converging", "automation"]
+    }
+  ]
+}

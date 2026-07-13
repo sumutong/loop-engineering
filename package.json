@@ -1,0 +1,40 @@
+{
+  "name": "loop-engineering",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "description": "Loop Engineering — AI 编程第四层范式。设计、执行、审计自收敛 AI 循环，任务由人定义、执行由系统驱动。",
+  "type": "module",
+  "bin": {
+    "loop-engineering": "bin/loop-engineering.js"
+  },
+  "files": [
+    "bin/",
+    "skills/loop-engineering/",
+    ".claude-plugin/",
+    "CLAUDE.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "loop-engineering",
+    "claude-code",
+    "skills",
+    "ai-loop",
+    "self-converging",
+    "automation",
+    "workflow",
+    "orchestration",
+    "tdd",
+    "cicd",
+    "auto-fix"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jnMetaCode/loop-engineering.git"
+  },
+  "homepage": "https://github.com/jnMetaCode/loop-engineering",
+  "author": "",
+  "license": "MIT"
+}
