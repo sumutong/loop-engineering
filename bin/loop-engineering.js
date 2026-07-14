@@ -146,5 +146,19 @@ console.log(`  ✅ ${target.name}: ${fileCount} 个文件 -> ${relative(PROJECT_
 
 updateClaudeMd();
 
+// 检查 superpowers-zh 依赖
+const SP_SKILL = '.claude/skills/superpowers-zh/SKILL.md';
+if (!existsSync(join(PROJECT_DIR, SP_SKILL))) {
+  console.log(`\n  ⚠️  依赖缺失: superpowers-zh（loop-engineering 运行时需要）`);
+  console.log(`  正在安装: npx superpowers-zh`);
+  const { execSync } = require('child_process');
+  try {
+    execSync('npx superpowers-zh', { cwd: PROJECT_DIR, stdio: 'inherit' });
+    console.log(`  ✅ superpowers-zh 安装完成`);
+  } catch {
+    console.log(`  ⚠️  npx superpowers-zh 失败，请手动安装:\n     npx superpowers-zh`);
+  }
+}
+
 console.log(`\n  安装完成！重启 Claude Code 即可使用。\n`);
 console.log(`  快速体验：在 Claude Code 中说 "帮我设计一个 CI 自动修复 loop"\n`);
